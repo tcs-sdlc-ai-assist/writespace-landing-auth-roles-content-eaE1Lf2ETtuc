@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate source constraints
+        shell: bash
+        run: |
+          node --input-type=module <<'EOF'
+          import { readdir, readFile } from 'node:fs/promises';
+          import path from 'node:path';
+
+          const expectedVercelConfig = {
+            rewrites: [{ source: '/(.*)', destination: '/index.html' }],
+          };
+          const vercelSource = await readFile('vercel.json', 'utf8');
+          const vercelConfig = JSON.parse(vercelSource);
+
+          if (JSON.stringify(vercelConfig) !== JSON.stringify(expectedVercelConfig)) {
+            throw new Error('vercel.json must contain only the required SPA rewrite.');
+          }
+
+          const stylesheet = await readFile('src/index.css', 'utf8');
+          const normalizedStylesheet = stylesheet
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .join('\n');
+          const expectedStylesheet = [
+            '@tailwind base;',
+            '@tailwind components;',
+            '@tailwind utilities;',
+          ].join('\n');
+
+          if (normalizedStylesheet !== expectedStylesheet) {
+            throw new Error('src/index.css must contain only the three Tailwind directives.');
+          }
+
+          async function collectSourceFiles(directory) {
+            const entries = await readdir(directory, { withFileTypes: true });
+            const files = [];
+
+            for (const entry of entries) {
+              const entryPath = path.join(directory, entry.name);
+
+              if (entry.isDirectory()) {
+                files.push(...await collectSourceFiles(entryPath));
+              } else if (/\.(js|jsx)$/.test(entry.name)) {
+                files.push(entryPath);
+              }
+            }
+
+            return files;
+          }
+
+          const prohibitedPatterns = [
+            {
+              pattern: /\bdangerouslySetInnerHTML\b/,
+              message: 'dangerouslySetInnerHTML is prohibited',
+            },
+            {
+              pattern: /\beval\s*\(/,
+              message: 'eval is prohibited',
+            },
+            {
+              pattern: /\b(?:fetch|XMLHttpRequest|WebSocket)\b/,
+              message: 'network clients are prohibited',
+            },
+            {
+              pattern: /console\.(?:log|info|debug)\s*\([^)]*password/i,
+              message: 'password logging is prohibited',
+            },
+          ];
+
+          for (const file of await collectSourceFiles('src')) {
+            const source = await readFile(file, 'utf8');
+
+            for (const { pattern, message } of prohibitedPatterns) {
+              if (pattern.test(source)) {
+                throw new Error(`${file}: ${message}.`);
+              }
+            }
+          }
+          EOF
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build production application
+        run: npm run build

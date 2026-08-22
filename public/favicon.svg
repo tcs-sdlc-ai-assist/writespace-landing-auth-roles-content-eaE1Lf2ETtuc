@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">WriteSpace</title>
+  <rect width="64" height="64" rx="14" fill="#4f46e5"/>
+  <path d="M15 18a5 5 0 0 1 5-5h12v37H20a5 5 0 0 0-5 5V18Z" fill="#fff"/>
+  <path d="M49 18a5 5 0 0 0-5-5H32v37h12a5 5 0 0 1 5 5V18Z" fill="#e0e7ff"/>
+  <path d="M21 23h6M21 30h6M37 23h6M37 30h6" fill="none" stroke="#4f46e5" stroke-linecap="round" stroke-width="3"/>
+</svg>
